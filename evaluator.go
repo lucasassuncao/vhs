@@ -111,8 +111,12 @@ func Evaluate(ctx context.Context, tape string, out io.Writer, opts ...Evaluator
 	}
 
 	// Begin recording frames as we are now in a recording state.
-	ctx, cancel := context.WithCancel(ctx)
-	ch := v.Record(ctx)
+	//
+	// recordCtx is the context teardown() cancels to stop the recorder, so it
+	// must stay separate from ctx: Render runs ffmpeg after teardown, and a
+	// cancelled context makes exec.CommandContext fail before ffmpeg starts.
+	recordCtx, cancel := context.WithCancel(ctx)
+	ch := v.Record(recordCtx)
 
 	// Clean up temporary files at the end.
 	defer func() {
@@ -139,9 +143,9 @@ func Evaluate(ctx context.Context, tape string, out io.Writer, opts ...Evaluator
 	}()
 
 	for _, cmd := range cmds[offset:] {
-		if ctx.Err() != nil {
+		if recordCtx.Err() != nil {
 			teardown()
-			return []error{ctx.Err()}
+			return []error{recordCtx.Err()}
 		}
 
 		// When changing the FontFamily, FontSize, LineHeight, Padding
